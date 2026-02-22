@@ -1,71 +1,252 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  AlertCircle,
+  Sparkles,
+  FolderOpen,
+  User,
+  Building2,
+  Phone,
+  Video,
+  MapPin,
+} from "lucide-react";
 import clsx from "clsx";
 import { useNavigate } from "react-router";
 
-type FormData = {
-  projectName: string;
-  projectType: string;
-  description: string;
-  priority: "low" | "medium" | "high";
-  budget: string;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string;
+// ──────────────────────── Types ────────────────────────
+type ClientType = "individual" | "organisation";
+type CommunicationPref = "call" | "gmeet" | "offline";
+
+type FormState = {
+  // Step 1
+  projectStage: "new" | "existing" | "";
+  softwareCategories: string[];
+  // Step 2
+  priority: "low" | "medium" | "high" | "";
+  summary: string;
+  // Step 3
+  clientType: ClientType | "";
+  // Individual fields
+  fullName: string;
+  phoneNumber: string;
+  emailId: string;
+  address: string;
+  state: string;
+  pincode: string;
+  preferredCommunication: CommunicationPref | "";
+  // Organisation fields
+  organizationName: string;
+  contactPerson: string;
+  contactNumber: string;
+  orgEmailId: string;
+  organizationAddress: string;
+  orgState: string;
+  orgPincode: string;
+  orgPreferredCommunication: CommunicationPref | "";
 };
 
-const steps = [
-  { id: 1, title: "Project Info" },
-  { id: 2, title: "Details" },
-  { id: 3, title: "Client Info" },
+const initialFormState: FormState = {
+  projectStage: "",
+  softwareCategories: [],
+  priority: "",
+  summary: "",
+  clientType: "",
+  fullName: "",
+  phoneNumber: "",
+  emailId: "",
+  address: "",
+  state: "",
+  pincode: "",
+  preferredCommunication: "",
+  organizationName: "",
+  contactPerson: "",
+  contactNumber: "",
+  orgEmailId: "",
+  organizationAddress: "",
+  orgState: "",
+  orgPincode: "",
+  orgPreferredCommunication: "",
+};
+
+// ──────────────────────── Constants ────────────────────────
+const SOFTWARE_CATEGORIES = [
+  "Website",
+  "Web-App",
+  "Mobile App",
+  "Desktop Software",
+  "AI/ML App",
+  "Blockchain & Crypto",
+  "Cloud Solution",
+  "Game Development",
+  "Cyber Security Solution",
+  "Custom Bots",
+  "Browser Plugins",
+  "Data Analytics & Visualization",
+  "Others",
 ];
 
+const steps = [
+  { id: 1, title: "Project Type" },
+  { id: 2, title: "Priority & Summary" },
+  { id: 3, title: "Contact Info" },
+];
+
+// ──────────────────────── Helpers ────────────────────────
+function InputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  error?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={clsx(
+          "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
+          error
+            ? "border-red-500 ring-red-100"
+            : "border-gray-200 focus:border-black"
+        )}
+        placeholder={placeholder}
+      />
+      {error && (
+        <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
+          <AlertCircle size={14} /> {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────── Main Component ────────────────────────
 export function RaiseRequest() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState<FormState>(initialFormState);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
-  const {
-    register,
-    handleSubmit,
-    trigger,
-    formState: { errors },
-  } = useForm<FormData>({
-    mode: "onChange",
-  });
+  const updateField = <K extends keyof FormState>(
+    key: K,
+    value: FormState[K]
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    // Clear error for this field
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
-  const nextStep = async () => {
-    let isValid = false;
-    if (currentStep === 1) {
-      isValid = await trigger(["projectName", "projectType", "description"]);
-    } else if (currentStep === 2) {
-      isValid = await trigger(["priority", "budget"]);
+  const toggleCategory = (cat: string) => {
+    setForm((prev) => {
+      const cats = prev.softwareCategories.includes(cat)
+        ? prev.softwareCategories.filter((c) => c !== cat)
+        : [...prev.softwareCategories, cat];
+      return { ...prev, softwareCategories: cats };
+    });
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next["softwareCategories"];
+      return next;
+    });
+  };
+
+  // ── Validation ──
+  const validateStep = (step: number): boolean => {
+    const errs: Record<string, string> = {};
+
+    if (step === 1) {
+      if (!form.projectStage)
+        errs.projectStage = "Select a project stage";
+      if (form.softwareCategories.length === 0)
+        errs.softwareCategories = "Select at least one category";
     }
-    
-    if (isValid) {
+
+    if (step === 2) {
+      if (!form.priority) errs.priority = "Select a priority";
+      if (!form.summary.trim())
+        errs.summary = "Please enter a summary";
+    }
+
+    if (step === 3) {
+      if (!form.clientType)
+        errs.clientType = "Select Individual or Organisation";
+
+      if (form.clientType === "individual") {
+        if (!form.fullName.trim()) errs.fullName = "Required";
+        if (!form.phoneNumber.trim()) errs.phoneNumber = "Required";
+        if (!form.emailId.trim()) errs.emailId = "Required";
+        if (!form.address.trim()) errs.address = "Required";
+        if (!form.state.trim()) errs.state = "Required";
+        if (!form.pincode.trim()) errs.pincode = "Required";
+        if (!form.preferredCommunication)
+          errs.preferredCommunication = "Select one";
+      }
+
+      if (form.clientType === "organisation") {
+        if (!form.organizationName.trim())
+          errs.organizationName = "Required";
+        if (!form.contactPerson.trim()) errs.contactPerson = "Required";
+        if (!form.contactNumber.trim()) errs.contactNumber = "Required";
+        if (!form.orgEmailId.trim()) errs.orgEmailId = "Required";
+        if (!form.organizationAddress.trim())
+          errs.organizationAddress = "Required";
+        if (!form.orgState.trim()) errs.orgState = "Required";
+        if (!form.orgPincode.trim()) errs.orgPincode = "Required";
+        if (!form.orgPreferredCommunication)
+          errs.orgPreferredCommunication = "Select one";
+      }
+    }
+
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const nextStep = () => {
+    if (validateStep(currentStep)) {
       setCurrentStep((prev) => prev + 1);
     }
   };
 
-  const prevStep = () => {
-    setCurrentStep((prev) => prev - 1);
-  };
+  const prevStep = () => setCurrentStep((prev) => prev - 1);
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async () => {
+    if (!validateStep(3)) return;
     setIsSubmitting(true);
-    // Simulate API
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log(data);
+    console.log("Submitted:", form);
     setIsSubmitting(false);
     navigate("/app/track");
   };
 
+  // ──────────────────────── Render ────────────────────────
   return (
     <div className="min-h-screen bg-[#FDFBF7] p-6 pb-32 flex flex-col">
       <header className="mb-8">
-        <button onClick={() => navigate(-1)} className="mb-4 p-2 -ml-2 text-gray-400 hover:text-gray-900">
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-4 p-2 -ml-2 text-gray-400 hover:text-gray-900"
+        >
           <ArrowLeft size={24} />
         </button>
         <h1 className="text-3xl font-bold text-gray-900">New Request</h1>
@@ -85,72 +266,134 @@ export function RaiseRequest() {
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col">
+      {/* Step label */}
+      <div className="mb-6 flex items-center gap-2">
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+          Step {currentStep} of {steps.length}
+        </span>
+        <span className="text-xs text-gray-300">·</span>
+        <span className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+          {steps[currentStep - 1].title}
+        </span>
+      </div>
+
+      {/* Steps */}
+      <div className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
+          {/* ───────── STEP 1: Project Type ───────── */}
           {currentStep === 1 && (
             <motion.div
               key="step1"
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -20, opacity: 0 }}
-              className="space-y-6 flex-1"
+              className="space-y-8 flex-1"
             >
+              {/* Project Stage */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
-                <input
-                  {...register("projectName", { required: "Project name is required" })}
-                  className={clsx(
-                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
-                    errors.projectName ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                  )}
-                  placeholder="e.g. Mobile App Redesign"
-                />
-                {errors.projectName && (
-                  <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                    <AlertCircle size={14} /> {errors.projectName.message}
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Project Stage
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      value: "new" as const,
+                      label: "New",
+                      icon: <Sparkles size={28} />,
+                      desc: "Start from scratch",
+                    },
+                    {
+                      value: "existing" as const,
+                      label: "Existing",
+                      icon: <FolderOpen size={28} />,
+                      desc: "Upgrade or fix",
+                    },
+                  ].map((opt) => (
+                    <motion.button
+                      key={opt.value}
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => updateField("projectStage", opt.value)}
+                      className={clsx(
+                        "relative p-5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all",
+                        form.projectStage === opt.value
+                          ? "border-black bg-black text-white shadow-lg shadow-black/20"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                      )}
+                    >
+                      {opt.icon}
+                      <span className="font-bold text-lg">{opt.label}</span>
+                      <span
+                        className={clsx(
+                          "text-xs",
+                          form.projectStage === opt.value
+                            ? "text-white/70"
+                            : "text-gray-400"
+                        )}
+                      >
+                        {opt.desc}
+                      </span>
+                      {form.projectStage === opt.value && (
+                        <motion.div
+                          layoutId="stage-check"
+                          className="absolute top-3 right-3 w-6 h-6 bg-white rounded-full flex items-center justify-center"
+                        >
+                          <Check size={14} className="text-black" />
+                        </motion.div>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
+                {errors.projectStage && (
+                  <p className="mt-2 text-red-500 text-sm flex items-center gap-1">
+                    <AlertCircle size={14} /> {errors.projectStage}
                   </p>
                 )}
               </div>
 
+              {/* Software Categories */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
-                <select
-                  {...register("projectType", { required: "Please select a type" })}
-                  className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 focus:border-black focus:ring-2 focus:ring-black outline-none appearance-none"
-                >
-                  <option value="">Select type...</option>
-                  <option value="web">Web Development</option>
-                  <option value="mobile">Mobile App</option>
-                  <option value="design">UI/UX Design</option>
-                  <option value="consulting">Consulting</option>
-                </select>
-                {errors.projectType && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.projectType.message}
-                    </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  {...register("description", { required: "Description is required" })}
-                  rows={4}
-                  className={clsx(
-                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all resize-none",
-                    errors.description ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                  )}
-                  placeholder="Briefly describe your requirements..."
-                />
-                {errors.description && (
-                  <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                    <AlertCircle size={14} /> {errors.description.message}
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Software Categories
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {SOFTWARE_CATEGORIES.map((cat) => {
+                    const isSelected =
+                      form.softwareCategories.includes(cat);
+                    return (
+                      <motion.button
+                        key={cat}
+                        type="button"
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => toggleCategory(cat)}
+                        className={clsx(
+                          "px-4 py-2.5 rounded-full text-sm font-semibold border transition-all",
+                          isSelected
+                            ? "bg-black text-white border-black shadow-md shadow-black/10"
+                            : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                        )}
+                      >
+                        {isSelected && (
+                          <Check
+                            size={14}
+                            className="inline mr-1.5 -mt-0.5"
+                          />
+                        )}
+                        {cat}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+                {errors.softwareCategories && (
+                  <p className="mt-2 text-red-500 text-sm flex items-center gap-1">
+                    <AlertCircle size={14} /> {errors.softwareCategories}
                   </p>
                 )}
               </div>
             </motion.div>
           )}
 
+          {/* ───────── STEP 2: Priority & Summary ───────── */}
           {currentStep === 2 && (
             <motion.div
               key="step2"
@@ -159,53 +402,72 @@ export function RaiseRequest() {
               exit={{ x: -20, opacity: 0 }}
               className="space-y-6 flex-1"
             >
+              {/* Priority */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Priority Level</label>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Priority Level
+                </label>
                 <div className="grid grid-cols-3 gap-3">
-                  {["low", "medium", "high"].map((p) => (
-                    <label key={p} className="cursor-pointer">
-                      <input
-                        type="radio"
-                        value={p}
-                        {...register("priority", { required: "Select priority" })}
-                        className="peer sr-only"
-                      />
-                      <div className="h-24 rounded-2xl border-2 border-gray-200 bg-white peer-checked:border-black peer-checked:bg-black peer-checked:text-white flex flex-col items-center justify-center transition-all">
-                        <span className="capitalize font-bold text-lg">{p}</span>
-                      </div>
-                    </label>
+                  {(
+                    [
+                      { value: "low", emoji: "🟢", color: "bg-emerald-50 border-emerald-200" },
+                      { value: "medium", emoji: "🟡", color: "bg-amber-50 border-amber-200" },
+                      { value: "high", emoji: "🔴", color: "bg-red-50 border-red-200" },
+                    ] as const
+                  ).map((p) => (
+                    <motion.button
+                      key={p.value}
+                      type="button"
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => updateField("priority", p.value)}
+                      className={clsx(
+                        "h-24 rounded-2xl border-2 flex flex-col items-center justify-center transition-all",
+                        form.priority === p.value
+                          ? "border-black bg-black text-white shadow-lg shadow-black/20"
+                          : `${p.color} text-gray-700`
+                      )}
+                    >
+                      <span className="text-2xl mb-1">{p.emoji}</span>
+                      <span className="capitalize font-bold text-sm">
+                        {p.value}
+                      </span>
+                    </motion.button>
                   ))}
                 </div>
                 {errors.priority && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.priority.message}
-                    </p>
+                  <p className="mt-2 text-red-500 text-sm flex items-center gap-1">
+                    <AlertCircle size={14} /> {errors.priority}
+                  </p>
                 )}
               </div>
 
+              {/* Summary */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Budget</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                  <input
-                    type="number"
-                    {...register("budget", { required: "Budget is required" })}
-                    className={clsx(
-                        "w-full pl-8 pr-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
-                        errors.budget ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                      )}
-                    placeholder="5000"
-                  />
-                </div>
-                {errors.budget && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.budget.message}
-                    </p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Project Summary
+                </label>
+                <textarea
+                  value={form.summary}
+                  onChange={(e) => updateField("summary", e.target.value)}
+                  rows={5}
+                  className={clsx(
+                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all resize-none",
+                    errors.summary
+                      ? "border-red-500 ring-red-100"
+                      : "border-gray-200 focus:border-black"
+                  )}
+                  placeholder="Briefly describe your project, goals, and any specific requirements..."
+                />
+                {errors.summary && (
+                  <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
+                    <AlertCircle size={14} /> {errors.summary}
+                  </p>
                 )}
               </div>
             </motion.div>
           )}
 
+          {/* ───────── STEP 3: Contact Info ───────── */}
           {currentStep === 3 && (
             <motion.div
               key="step3"
@@ -214,69 +476,268 @@ export function RaiseRequest() {
               exit={{ x: -20, opacity: 0 }}
               className="space-y-6 flex-1"
             >
+              {/* Client Type selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
-                <input
-                  {...register("clientName", { required: "Name is required" })}
-                  className={clsx(
-                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
-                    errors.clientName ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                  )}
-                  placeholder="John Doe"
-                />
-                 {errors.clientName && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.clientName.message}
-                    </p>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  You are
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      value: "individual" as ClientType,
+                      label: "Individual",
+                      icon: <User size={28} />,
+                    },
+                    {
+                      value: "organisation" as ClientType,
+                      label: "Organisation",
+                      icon: <Building2 size={28} />,
+                    },
+                  ].map((opt) => (
+                    <motion.button
+                      key={opt.value}
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => updateField("clientType", opt.value)}
+                      className={clsx(
+                        "relative p-5 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all",
+                        form.clientType === opt.value
+                          ? "border-black bg-black text-white shadow-lg shadow-black/20"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                      )}
+                    >
+                      {opt.icon}
+                      <span className="font-bold">{opt.label}</span>
+                      {form.clientType === opt.value && (
+                        <motion.div
+                          layoutId="client-check"
+                          className="absolute top-3 right-3 w-6 h-6 bg-white rounded-full flex items-center justify-center"
+                        >
+                          <Check size={14} className="text-black" />
+                        </motion.div>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
+                {errors.clientType && (
+                  <p className="mt-2 text-red-500 text-sm flex items-center gap-1">
+                    <AlertCircle size={14} /> {errors.clientType}
+                  </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  {...register("clientEmail", { 
-                    required: "Email is required",
-                    pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: "Invalid email address"
-                    }
-                  })}
-                  className={clsx(
-                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
-                    errors.clientEmail ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                  )}
-                  placeholder="john@company.com"
-                />
-                 {errors.clientEmail && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.clientEmail.message}
-                    </p>
-                )}
-              </div>
+              {/* ── Individual Form ── */}
+              <AnimatePresence mode="wait">
+                {form.clientType === "individual" && (
+                  <motion.div
+                    key="individual"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-4 overflow-hidden"
+                  >
+                    <InputField
+                      label="Full Name"
+                      value={form.fullName}
+                      onChange={(v) => updateField("fullName", v)}
+                      placeholder="John Doe"
+                      error={errors.fullName}
+                    />
+                    <InputField
+                      label="Phone Number"
+                      value={form.phoneNumber}
+                      onChange={(v) => updateField("phoneNumber", v)}
+                      placeholder="+91 98765 43210"
+                      type="tel"
+                      error={errors.phoneNumber}
+                    />
+                    <InputField
+                      label="Email ID"
+                      value={form.emailId}
+                      onChange={(v) => updateField("emailId", v)}
+                      placeholder="john@email.com"
+                      type="email"
+                      error={errors.emailId}
+                    />
+                    <InputField
+                      label="Address"
+                      value={form.address}
+                      onChange={(v) => updateField("address", v)}
+                      placeholder="123 Main Street"
+                      error={errors.address}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <InputField
+                        label="State"
+                        value={form.state}
+                        onChange={(v) => updateField("state", v)}
+                        placeholder="State"
+                        error={errors.state}
+                      />
+                      <InputField
+                        label="Pincode"
+                        value={form.pincode}
+                        onChange={(v) => updateField("pincode", v)}
+                        placeholder="560001"
+                        error={errors.pincode}
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <input
-                  type="tel"
-                  {...register("clientPhone", { required: "Phone is required" })}
-                  className={clsx(
-                    "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all",
-                    errors.clientPhone ? "border-red-500 ring-red-100" : "border-gray-200 focus:border-black"
-                  )}
-                  placeholder="+1 (555) 000-0000"
-                />
-                 {errors.clientPhone && (
-                    <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                        <AlertCircle size={14} /> {errors.clientPhone.message}
-                    </p>
+                    {/* Preferred Communication */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Communication
+                      </label>
+                      <div className="flex gap-2">
+                        {(
+                          [
+                            { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
+                            { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
+                            { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
+                          ]
+                        ).map((c) => (
+                          <motion.button
+                            key={c.value}
+                            type="button"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() =>
+                              updateField("preferredCommunication", c.value)
+                            }
+                            className={clsx(
+                              "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all",
+                              form.preferredCommunication === c.value
+                                ? "border-black bg-black text-white shadow-md"
+                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                            )}
+                          >
+                            {c.icon}
+                            {c.label}
+                          </motion.button>
+                        ))}
+                      </div>
+                      {errors.preferredCommunication && (
+                        <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
+                          <AlertCircle size={14} />{" "}
+                          {errors.preferredCommunication}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
                 )}
-              </div>
+
+                {/* ── Organisation Form ── */}
+                {form.clientType === "organisation" && (
+                  <motion.div
+                    key="organisation"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-4 overflow-hidden"
+                  >
+                    <InputField
+                      label="Organization Name"
+                      value={form.organizationName}
+                      onChange={(v) => updateField("organizationName", v)}
+                      placeholder="Acme Corp"
+                      error={errors.organizationName}
+                    />
+                    <InputField
+                      label="Contact Person"
+                      value={form.contactPerson}
+                      onChange={(v) => updateField("contactPerson", v)}
+                      placeholder="Jane Smith"
+                      error={errors.contactPerson}
+                    />
+                    <InputField
+                      label="Contact Number"
+                      value={form.contactNumber}
+                      onChange={(v) => updateField("contactNumber", v)}
+                      placeholder="+91 98765 43210"
+                      type="tel"
+                      error={errors.contactNumber}
+                    />
+                    <InputField
+                      label="Email ID"
+                      value={form.orgEmailId}
+                      onChange={(v) => updateField("orgEmailId", v)}
+                      placeholder="contact@acme.com"
+                      type="email"
+                      error={errors.orgEmailId}
+                    />
+                    <InputField
+                      label="Organization Address"
+                      value={form.organizationAddress}
+                      onChange={(v) => updateField("organizationAddress", v)}
+                      placeholder="456 Business Park"
+                      error={errors.organizationAddress}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <InputField
+                        label="State"
+                        value={form.orgState}
+                        onChange={(v) => updateField("orgState", v)}
+                        placeholder="State"
+                        error={errors.orgState}
+                      />
+                      <InputField
+                        label="Pincode"
+                        value={form.orgPincode}
+                        onChange={(v) => updateField("orgPincode", v)}
+                        placeholder="560001"
+                        error={errors.orgPincode}
+                      />
+                    </div>
+
+                    {/* Preferred Communication */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Communication
+                      </label>
+                      <div className="flex gap-2">
+                        {(
+                          [
+                            { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
+                            { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
+                            { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
+                          ]
+                        ).map((c) => (
+                          <motion.button
+                            key={c.value}
+                            type="button"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() =>
+                              updateField(
+                                "orgPreferredCommunication",
+                                c.value
+                              )
+                            }
+                            className={clsx(
+                              "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all",
+                              form.orgPreferredCommunication === c.value
+                                ? "border-black bg-black text-white shadow-md"
+                                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                            )}
+                          >
+                            {c.icon}
+                            {c.label}
+                          </motion.button>
+                        ))}
+                      </div>
+                      {errors.orgPreferredCommunication && (
+                        <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
+                          <AlertCircle size={14} />{" "}
+                          {errors.orgPreferredCommunication}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Navigation Buttons */}
+        {/* ───────── Navigation Buttons ───────── */}
         <div className="mt-8 flex gap-4">
           {currentStep > 1 && (
             <button
@@ -297,19 +758,22 @@ export function RaiseRequest() {
             </button>
           ) : (
             <button
-              type="submit"
+              type="button"
+              onClick={onSubmit}
               disabled={isSubmitting}
               className="flex-1 py-4 rounded-xl bg-black text-white font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-black/20 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <>Submit Request <Check size={20} /></>
+                <>
+                  Submit Request <Check size={20} />
+                </>
               )}
             </button>
           )}
         </div>
-      </form>
+      </div>
     </div>
   );
 }

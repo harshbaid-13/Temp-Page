@@ -16,11 +16,11 @@ export function BottomNav() {
   const currentPath = location.pathname;
 
   return (
-    <div className="absolute bottom-6 inset-x-0 z-50 flex justify-center pointer-events-none">
-      <div className="bg-[#1C1C1E]/90 backdrop-blur-xl p-1.5 rounded-[2rem] flex items-center gap-1 shadow-2xl shadow-black/40 border border-white/10 pointer-events-auto transition-transform duration-300">
+    <div className="fixed bottom-0 inset-x-0 z-50 flex justify-center pointer-events-none pb-5">
+      <div className="bg-[#1C1C1E]/90 backdrop-blur-xl p-1.5 rounded-[2rem] flex items-center gap-1 shadow-[0_8px_40px_-8px_rgba(0,0,0,0.5)] border border-white/10 pointer-events-auto">
         {navItems.map((item) => {
           const isActive = currentPath === item.path || (item.path === "/app" && currentPath === "/");
-          
+
           return (
             <Link key={item.path} to={item.path} className="relative block h-12 flex items-center">
               <motion.div
@@ -41,22 +41,22 @@ export function BottomNav() {
                 )}
               >
                 <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} className="shrink-0" />
-                
+
                 <AnimatePresence mode="popLayout" initial={false}>
                   {isActive && (
                     <motion.span
                       initial={{ opacity: 0, width: 0, marginLeft: 0 }}
-                      animate={{ 
-                        opacity: 1, 
+                      animate={{
+                        opacity: 1,
                         width: "auto",
-                        marginLeft: 8 
+                        marginLeft: 8
                       }}
-                      exit={{ 
-                        opacity: 0, 
+                      exit={{
+                        opacity: 0,
                         width: 0,
                         marginLeft: 0
                       }}
-                      transition={{ 
+                      transition={{
                         opacity: { duration: 0.2, delay: 0.1 },
                         width: { duration: 0.25, ease: "easeInOut" },
                         marginLeft: { duration: 0.25, ease: "easeInOut" }
