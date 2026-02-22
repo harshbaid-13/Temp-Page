@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -12,9 +12,14 @@ import {
   Phone,
   Video,
   MapPin,
+  Upload,
+  FileText,
+  Image,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
+import { useAuth } from "../context/AuthContext";
 
 // ──────────────────────── Types ────────────────────────
 type ClientType = "individual" | "organisation";
@@ -27,6 +32,7 @@ type FormState = {
   // Step 2
   priority: "low" | "medium" | "high" | "";
   summary: string;
+  uploadedFiles: { name: string; size: string; type: string }[];
   // Step 3
   clientType: ClientType | "";
   // Individual fields
@@ -53,6 +59,7 @@ const initialFormState: FormState = {
   softwareCategories: [],
   priority: "",
   summary: "",
+  uploadedFiles: [],
   clientType: "",
   fullName: "",
   phoneNumber: "",
@@ -70,6 +77,9 @@ const initialFormState: FormState = {
   orgPincode: "",
   orgPreferredCommunication: "",
 };
+
+const DRAFT_KEY = "idea2code_request_draft";
+const DRAFT_STEP_KEY = "idea2code_request_step";
 
 // ──────────────────────── Constants ────────────────────────
 const SOFTWARE_CATEGORIES = [
@@ -138,18 +148,48 @@ function InputField({
 
 // ──────────────────────── Main Component ────────────────────────
 export function RaiseRequest() {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [form, setForm] = useState<FormState>(initialFormState);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Hydrate from localStorage draft
+  const [form, setForm] = useState<FormState>(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { }
+    return initialFormState;
+  });
+
+  // Restore step (especially after login redirect)
+  const [currentStep, setCurrentStep] = useState(() => {
+    try {
+      const savedStep = localStorage.getItem(DRAFT_STEP_KEY);
+      if (savedStep) return parseInt(savedStep, 10);
+    } catch { }
+    return 1;
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Save draft to localStorage whenever form changes
+  useEffect(() => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+  }, [form]);
+
+  // Save current step
+  useEffect(() => {
+    localStorage.setItem(DRAFT_STEP_KEY, String(currentStep));
+  }, [currentStep]);
 
   const updateField = <K extends keyof FormState>(
     key: K,
     value: FormState[K]
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    // Clear error for this field
     setErrors((prev) => {
       const next = { ...prev };
       delete next[key];
@@ -171,21 +211,40 @@ export function RaiseRequest() {
     });
   };
 
+  // ── File upload mock ──
+  const handleMockFileSelect = () => {
+    // Simulate picking a file
+    const mockFiles = [
+      { name: "requirements.pdf", size: "2.4 MB", type: "pdf" },
+      { name: "wireframes.png", size: "1.8 MB", type: "image" },
+    ];
+    const randomFile = mockFiles[Math.floor(Math.random() * mockFiles.length)];
+    setForm((prev) => ({
+      ...prev,
+      uploadedFiles: [...prev.uploadedFiles, { ...randomFile, name: `${randomFile.name.split('.')[0]}_${Date.now()}.${randomFile.name.split('.')[1]}` }],
+    }));
+  };
+
+  const removeFile = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      uploadedFiles: prev.uploadedFiles.filter((_, i) => i !== index),
+    }));
+  };
+
   // ── Validation ──
   const validateStep = (step: number): boolean => {
     const errs: Record<string, string> = {};
 
     if (step === 1) {
-      if (!form.projectStage)
-        errs.projectStage = "Select a project stage";
+      if (!form.projectStage) errs.projectStage = "Select a project stage";
       if (form.softwareCategories.length === 0)
         errs.softwareCategories = "Select at least one category";
     }
 
     if (step === 2) {
       if (!form.priority) errs.priority = "Select a priority";
-      if (!form.summary.trim())
-        errs.summary = "Please enter a summary";
+      if (!form.summary.trim()) errs.summary = "Please enter a summary";
     }
 
     if (step === 3) {
@@ -204,8 +263,7 @@ export function RaiseRequest() {
       }
 
       if (form.clientType === "organisation") {
-        if (!form.organizationName.trim())
-          errs.organizationName = "Required";
+        if (!form.organizationName.trim()) errs.organizationName = "Required";
         if (!form.contactPerson.trim()) errs.contactPerson = "Required";
         if (!form.contactNumber.trim()) errs.contactNumber = "Required";
         if (!form.orgEmailId.trim()) errs.orgEmailId = "Required";
@@ -232,9 +290,23 @@ export function RaiseRequest() {
 
   const onSubmit = async () => {
     if (!validateStep(3)) return;
+
+    // Check auth — if not logged in, redirect to login
+    if (!isLoggedIn) {
+      // Save step so we return to step 3
+      localStorage.setItem(DRAFT_STEP_KEY, "3");
+      navigate("/login", { state: { returnTo: "/app/request" } });
+      return;
+    }
+
     setIsSubmitting(true);
     await new Promise((resolve) => setTimeout(resolve, 1500));
     console.log("Submitted:", form);
+
+    // Clear draft
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(DRAFT_STEP_KEY);
+
     setIsSubmitting(false);
     navigate("/app/track");
   };
@@ -358,8 +430,7 @@ export function RaiseRequest() {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {SOFTWARE_CATEGORIES.map((cat) => {
-                    const isSelected =
-                      form.softwareCategories.includes(cat);
+                    const isSelected = form.softwareCategories.includes(cat);
                     return (
                       <motion.button
                         key={cat}
@@ -374,10 +445,7 @@ export function RaiseRequest() {
                         )}
                       >
                         {isSelected && (
-                          <Check
-                            size={14}
-                            className="inline mr-1.5 -mt-0.5"
-                          />
+                          <Check size={14} className="inline mr-1.5 -mt-0.5" />
                         )}
                         {cat}
                       </motion.button>
@@ -449,7 +517,7 @@ export function RaiseRequest() {
                 <textarea
                   value={form.summary}
                   onChange={(e) => updateField("summary", e.target.value)}
-                  rows={5}
+                  rows={4}
                   className={clsx(
                     "w-full px-4 py-3 rounded-xl bg-white border focus:ring-2 focus:ring-black outline-none transition-all resize-none",
                     errors.summary
@@ -462,6 +530,99 @@ export function RaiseRequest() {
                   <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
                     <AlertCircle size={14} /> {errors.summary}
                   </p>
+                )}
+              </div>
+
+              {/* ── Upload Resources ── */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Upload Resources
+                </label>
+                {/* Drop zone */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    handleMockFileSelect();
+                  }}
+                  onClick={() => handleMockFileSelect()}
+                  className={clsx(
+                    "relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all",
+                    isDragging
+                      ? "border-black bg-gray-50"
+                      : "border-gray-300 hover:border-gray-400 bg-white"
+                  )}
+                >
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                    <Upload size={22} className="text-gray-500" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-700">
+                      Drag & drop or{" "}
+                      <span className="text-black underline">browse files</span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      PDFs & Photos accepted · Max size 100MB per file
+                    </p>
+                  </div>
+                  <div className="flex gap-2 mt-1">
+                    <span className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-medium flex items-center gap-1">
+                      <FileText size={12} /> PDF
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium flex items-center gap-1">
+                      <Image size={12} /> Photos
+                    </span>
+                  </div>
+                </div>
+
+                {/* Uploaded files list */}
+                {form.uploadedFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {form.uploadedFiles.map((file, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200"
+                      >
+                        <div
+                          className={clsx(
+                            "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                            file.type === "pdf"
+                              ? "bg-red-100 text-red-600"
+                              : "bg-blue-100 text-blue-600"
+                          )}
+                        >
+                          {file.type === "pdf" ? (
+                            <FileText size={18} />
+                          ) : (
+                            <Image size={18} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-xs text-gray-400">{file.size}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFile(index);
+                          }}
+                          className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 hover:bg-red-100 hover:text-red-500 transition-colors shrink-0"
+                        >
+                          <X size={14} />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -536,51 +697,13 @@ export function RaiseRequest() {
                     exit={{ opacity: 0, height: 0 }}
                     className="space-y-4 overflow-hidden"
                   >
-                    <InputField
-                      label="Full Name"
-                      value={form.fullName}
-                      onChange={(v) => updateField("fullName", v)}
-                      placeholder="John Doe"
-                      error={errors.fullName}
-                    />
-                    <InputField
-                      label="Phone Number"
-                      value={form.phoneNumber}
-                      onChange={(v) => updateField("phoneNumber", v)}
-                      placeholder="+91 98765 43210"
-                      type="tel"
-                      error={errors.phoneNumber}
-                    />
-                    <InputField
-                      label="Email ID"
-                      value={form.emailId}
-                      onChange={(v) => updateField("emailId", v)}
-                      placeholder="john@email.com"
-                      type="email"
-                      error={errors.emailId}
-                    />
-                    <InputField
-                      label="Address"
-                      value={form.address}
-                      onChange={(v) => updateField("address", v)}
-                      placeholder="123 Main Street"
-                      error={errors.address}
-                    />
+                    <InputField label="Full Name" value={form.fullName} onChange={(v) => updateField("fullName", v)} placeholder="John Doe" error={errors.fullName} />
+                    <InputField label="Phone Number" value={form.phoneNumber} onChange={(v) => updateField("phoneNumber", v)} placeholder="+91 98765 43210" type="tel" error={errors.phoneNumber} />
+                    <InputField label="Email ID" value={form.emailId} onChange={(v) => updateField("emailId", v)} placeholder="john@email.com" type="email" error={errors.emailId} />
+                    <InputField label="Address" value={form.address} onChange={(v) => updateField("address", v)} placeholder="123 Main Street" error={errors.address} />
                     <div className="grid grid-cols-2 gap-3">
-                      <InputField
-                        label="State"
-                        value={form.state}
-                        onChange={(v) => updateField("state", v)}
-                        placeholder="State"
-                        error={errors.state}
-                      />
-                      <InputField
-                        label="Pincode"
-                        value={form.pincode}
-                        onChange={(v) => updateField("pincode", v)}
-                        placeholder="560001"
-                        error={errors.pincode}
-                      />
+                      <InputField label="State" value={form.state} onChange={(v) => updateField("state", v)} placeholder="State" error={errors.state} />
+                      <InputField label="Pincode" value={form.pincode} onChange={(v) => updateField("pincode", v)} placeholder="560001" error={errors.pincode} />
                     </div>
 
                     {/* Preferred Communication */}
@@ -589,20 +712,16 @@ export function RaiseRequest() {
                         Preferred Communication
                       </label>
                       <div className="flex gap-2">
-                        {(
-                          [
-                            { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
-                            { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
-                            { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
-                          ]
-                        ).map((c) => (
+                        {([
+                          { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
+                          { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
+                          { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
+                        ]).map((c) => (
                           <motion.button
                             key={c.value}
                             type="button"
                             whileTap={{ scale: 0.95 }}
-                            onClick={() =>
-                              updateField("preferredCommunication", c.value)
-                            }
+                            onClick={() => updateField("preferredCommunication", c.value)}
                             className={clsx(
                               "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all",
                               form.preferredCommunication === c.value
@@ -617,8 +736,7 @@ export function RaiseRequest() {
                       </div>
                       {errors.preferredCommunication && (
                         <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                          <AlertCircle size={14} />{" "}
-                          {errors.preferredCommunication}
+                          <AlertCircle size={14} /> {errors.preferredCommunication}
                         </p>
                       )}
                     </div>
@@ -634,58 +752,14 @@ export function RaiseRequest() {
                     exit={{ opacity: 0, height: 0 }}
                     className="space-y-4 overflow-hidden"
                   >
-                    <InputField
-                      label="Organization Name"
-                      value={form.organizationName}
-                      onChange={(v) => updateField("organizationName", v)}
-                      placeholder="Acme Corp"
-                      error={errors.organizationName}
-                    />
-                    <InputField
-                      label="Contact Person"
-                      value={form.contactPerson}
-                      onChange={(v) => updateField("contactPerson", v)}
-                      placeholder="Jane Smith"
-                      error={errors.contactPerson}
-                    />
-                    <InputField
-                      label="Contact Number"
-                      value={form.contactNumber}
-                      onChange={(v) => updateField("contactNumber", v)}
-                      placeholder="+91 98765 43210"
-                      type="tel"
-                      error={errors.contactNumber}
-                    />
-                    <InputField
-                      label="Email ID"
-                      value={form.orgEmailId}
-                      onChange={(v) => updateField("orgEmailId", v)}
-                      placeholder="contact@acme.com"
-                      type="email"
-                      error={errors.orgEmailId}
-                    />
-                    <InputField
-                      label="Organization Address"
-                      value={form.organizationAddress}
-                      onChange={(v) => updateField("organizationAddress", v)}
-                      placeholder="456 Business Park"
-                      error={errors.organizationAddress}
-                    />
+                    <InputField label="Organization Name" value={form.organizationName} onChange={(v) => updateField("organizationName", v)} placeholder="Acme Corp" error={errors.organizationName} />
+                    <InputField label="Contact Person" value={form.contactPerson} onChange={(v) => updateField("contactPerson", v)} placeholder="Jane Smith" error={errors.contactPerson} />
+                    <InputField label="Contact Number" value={form.contactNumber} onChange={(v) => updateField("contactNumber", v)} placeholder="+91 98765 43210" type="tel" error={errors.contactNumber} />
+                    <InputField label="Email ID" value={form.orgEmailId} onChange={(v) => updateField("orgEmailId", v)} placeholder="contact@acme.com" type="email" error={errors.orgEmailId} />
+                    <InputField label="Organization Address" value={form.organizationAddress} onChange={(v) => updateField("organizationAddress", v)} placeholder="456 Business Park" error={errors.organizationAddress} />
                     <div className="grid grid-cols-2 gap-3">
-                      <InputField
-                        label="State"
-                        value={form.orgState}
-                        onChange={(v) => updateField("orgState", v)}
-                        placeholder="State"
-                        error={errors.orgState}
-                      />
-                      <InputField
-                        label="Pincode"
-                        value={form.orgPincode}
-                        onChange={(v) => updateField("orgPincode", v)}
-                        placeholder="560001"
-                        error={errors.orgPincode}
-                      />
+                      <InputField label="State" value={form.orgState} onChange={(v) => updateField("orgState", v)} placeholder="State" error={errors.orgState} />
+                      <InputField label="Pincode" value={form.orgPincode} onChange={(v) => updateField("orgPincode", v)} placeholder="560001" error={errors.orgPincode} />
                     </div>
 
                     {/* Preferred Communication */}
@@ -694,23 +768,16 @@ export function RaiseRequest() {
                         Preferred Communication
                       </label>
                       <div className="flex gap-2">
-                        {(
-                          [
-                            { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
-                            { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
-                            { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
-                          ]
-                        ).map((c) => (
+                        {([
+                          { value: "call" as CommunicationPref, label: "Call", icon: <Phone size={18} /> },
+                          { value: "gmeet" as CommunicationPref, label: "GMeet", icon: <Video size={18} /> },
+                          { value: "offline" as CommunicationPref, label: "Offline", icon: <MapPin size={18} /> },
+                        ]).map((c) => (
                           <motion.button
                             key={c.value}
                             type="button"
                             whileTap={{ scale: 0.95 }}
-                            onClick={() =>
-                              updateField(
-                                "orgPreferredCommunication",
-                                c.value
-                              )
-                            }
+                            onClick={() => updateField("orgPreferredCommunication", c.value)}
                             className={clsx(
                               "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all",
                               form.orgPreferredCommunication === c.value
@@ -725,8 +792,7 @@ export function RaiseRequest() {
                       </div>
                       {errors.orgPreferredCommunication && (
                         <p className="mt-1 text-red-500 text-sm flex items-center gap-1">
-                          <AlertCircle size={14} />{" "}
-                          {errors.orgPreferredCommunication}
+                          <AlertCircle size={14} /> {errors.orgPreferredCommunication}
                         </p>
                       )}
                     </div>

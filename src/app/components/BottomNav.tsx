@@ -1,14 +1,14 @@
-import { Home, ListChecks, Info, Phone, Plus, User, CreditCard, MessageCircle, BarChart2 } from "lucide-react";
+import { Monitor, BarChart2, Plus, MessageCircle, User } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import clsx from "clsx";
 import { motion, AnimatePresence } from "motion/react";
 
 const navItems = [
-  { path: "/app", icon: Home, label: "Home" },
+  { path: "/app", icon: Monitor, label: "Products" },
   { path: "/app/track", icon: BarChart2, label: "Track" },
-  { path: "/app/request", icon: Plus, label: "New" },
-  { path: "/app/about", icon: User, label: "Profile" },
-  { path: "/app/contact", icon: MessageCircle, label: "Chat" },
+  { path: "/app/request", icon: Plus, label: "Request" },
+  { path: "/app/contact", icon: MessageCircle, label: "Contact" },
+  { path: "/app/profile", icon: User, label: "Profile" },
 ];
 
 export function BottomNav() {
@@ -19,7 +19,7 @@ export function BottomNav() {
     <div className="fixed bottom-0 inset-x-0 z-50 flex justify-center pointer-events-none pb-5">
       <div className="bg-[#1C1C1E]/90 backdrop-blur-xl p-1.5 rounded-[2rem] flex items-center gap-1 shadow-[0_8px_40px_-8px_rgba(0,0,0,0.5)] border border-white/10 pointer-events-auto">
         {navItems.map((item) => {
-          const isActive = currentPath === item.path || (item.path === "/app" && currentPath === "/");
+          const isActive = currentPath === item.path;
 
           return (
             <Link key={item.path} to={item.path} className="relative block h-12 flex items-center">
